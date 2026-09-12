@@ -2,9 +2,10 @@ import React from 'react';
 import { 
   Home, Compass, Radio, Heart, History, Satellite, Film, 
   Tv, Trophy, Music2, Sparkles, Smile, Globe2, ChevronRight,
-  Flame, CheckCircle2
+  Flame, CheckCircle2, Settings, Shield
 } from 'lucide-react';
 import type { ActiveTab, Channel } from '../types';
+import { useSettings } from '../utils/useSettings';
 
 interface SidebarProps {
   expanded: boolean;
@@ -16,6 +17,7 @@ interface SidebarProps {
   featuredChannels: Channel[];
   onSelectChannel: (channel: Channel) => void;
   activeChannelId?: number;
+  onOpenSettings?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -28,7 +30,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   featuredChannels,
   onSelectChannel,
   activeChannelId,
+  onOpenSettings,
 }) => {
+  const { isProxyActive, activeProxyLabel } = useSettings();
   const mainNavItems = [
     { id: 'home' as ActiveTab, label: 'خانه', icon: Home },
     { id: 'explore' as ActiveTab, label: 'کاوش', icon: Compass },
@@ -76,6 +80,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           );
         })}
+
+        {/* Mini Sidebar Settings Button */}
+        {onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="w-[64px] h-[72px] mt-auto flex flex-col items-center justify-center gap-1.5 rounded-xl text-[#aaaaaa] hover:bg-[#202020] hover:text-[#f1f1f1] transition-colors relative"
+            title="تنظیمات و پروکسی"
+          >
+            <Settings size={22} className={isProxyActive ? 'text-sky-400' : ''} />
+            <span className="text-[10px] leading-tight text-center truncate max-w-[60px]">
+              تنظیمات
+            </span>
+            {isProxyActive && (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+            )}
+          </button>
+        )}
       </aside>
     );
   }
@@ -116,6 +138,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           );
         })}
+
+        {/* Full Sidebar Settings & Proxy Action Button */}
+        {onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              isProxyActive 
+                ? 'bg-sky-500/15 border border-sky-500/30 text-sky-300 hover:bg-sky-500/25' 
+                : 'text-[#f1f1f1] hover:bg-[#202020]'
+            }`}
+          >
+            <div className="flex items-center gap-4">
+              <Settings size={20} className={isProxyActive ? 'text-sky-400' : 'text-[#aaaaaa]'} />
+              <span>تنظیمات و پروکسی</span>
+            </div>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              isProxyActive ? 'bg-sky-500 text-black' : 'bg-[#222222] text-[#888888]'
+            }`}>
+              {isProxyActive ? 'پروکسی فعال' : 'عمومی'}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Categories section */}

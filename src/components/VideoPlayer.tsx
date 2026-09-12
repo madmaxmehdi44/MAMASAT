@@ -3,7 +3,8 @@ import Hls from 'hls.js';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize2, Minimize2, 
   AlertTriangle, Tv, Layers, RefreshCw, X, Radio, Volume1,
-  Sparkles, ExternalLink, Camera, Check, Zap, RotateCcw
+  Sparkles, ExternalLink, Camera, Check, Zap, RotateCcw,
+  Settings, Shield, ShieldAlert, Activity, Wifi
 } from 'lucide-react';
 import type { Channel, Source } from '../types';
 import { 
@@ -12,6 +13,8 @@ import {
   captureVideoFrame, 
   getTodayDateString 
 } from '../utils/thumbnailStorage';
+import { useSettings } from '../utils/useSettings';
+import { getProxiedUrl } from '../utils/settingsStorage';
 
 interface VideoPlayerProps {
   channel: Channel;
@@ -21,6 +24,7 @@ interface VideoPlayerProps {
   onMaximize?: () => void;
   onCloseMiniPlayer?: () => void;
   onToggleMinimize?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -31,7 +35,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onMaximize,
   onCloseMiniPlayer,
   onToggleMinimize,
+  onOpenSettings,
 }) => {
+  const { settings, updateSettings, isProxyActive, activeProxyLabel } = useSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -285,7 +291,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [autoplayBlocked, volume]);
 
   // Initialize and load stream with Hls.js
-  const loadStream = (streamUrl: string) => {
+  const loadStream = (rawStreamUrl: string) => {
     setIsLoading(true);
     setHasError(false);
     setErrorMessage('');
@@ -300,6 +306,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     video.volume = volume;
     video.muted = isMuted;
+
+    // Apply active proxy configuration if enabled
+    const streamUrl = getProxiedUrl(rawStreamUrl, settings);
 
     const attemptPlay = () => {
       const playPromise = video.play();
@@ -322,12 +331,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       }
     };
 
-    if (Hls.isSupported() && streamUrl.includes('.m3u8')) {
+    if (Hls.isSupported() && rawStreamUrl.includes('.m3u8')) {
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: isLowLatency,
+        lowLatencyMode: settings.enableLowLatency && isLowLatency,
         backBufferLength: 60,
-        maxBufferLength: 30,
+        maxBufferLength: settings.bufferLengthSeconds || 30,
         maxMaxBufferLength: 600,
         manifestLoadingTimeOut: 15000,
         levelLoadingTimeOut: 15000,
@@ -356,13 +365,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
+              // Automatic Anti-Filter Proxy Fallback if direct connection is blocked
+              if (settings.proxyMode === 'direct' && settings.autoProxyFallback) {
+                console.log('[Anti-Filter Auto-Heal] Direct stream failed. Automatically routing via Cloud Anti-Filter Proxy...');
+                updateSettings({ proxyMode: 'cloud_antifilter' });
+                setScreenshotToast({
+                  visible: true,
+                  message: '🛡️ سوئیچ خودکار به پروکسی ضد فیلتر جهت دور زدن اختلال اینترنت',
+                });
+                setTimeout(() => setScreenshotToast({ visible: false, message: '' }), 4000);
+                const bypassUrl = getProxiedUrl(rawStreamUrl, { ...settings, proxyMode: 'cloud_antifilter' });
+                hls.loadSource(bypassUrl);
+                hls.startLoad();
+                return;
+              }
+
               if (currentSourceIndex + 1 < sources.length) {
                 console.log(`Auto-switching to backup server ${currentSourceIndex + 1}...`);
                 setCurrentSourceIndex((prev) => prev + 1);
               } else {
                 hls.startLoad();
                 setHasError(true);
-                setErrorMessage('ارتباط با سرور پخش برقرار نشد. سرور دیگری را انتخاب نمایید.');
+                setErrorMessage('ارتباط با سرور پخش برقرار نشد. می‌توانید سرور دیگری انتخاب نمایید یا پروکسی ضد فیلتر را فعال کنید.');
               }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
@@ -408,7 +432,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         hlsRef.current = null;
       }
     };
-  }, [channel.id, currentSourceIndex]);
+  }, [
+    channel.id, 
+    currentSourceIndex, 
+    settings.proxyMode, 
+    settings.cloudProxyProvider, 
+    settings.selectedTelegramProxyId, 
+    settings.customProxyUrl
+  ]);
 
   // Keyboard Shortcuts (Space/K, M, F, T, I, Up/Down)
   useEffect(() => {
@@ -461,12 +492,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         e.preventDefault();
         video.currentTime = video.currentTime + 10;
         checkLiveDrift();
+      } else if (e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        const nextMode = isProxyActive ? 'direct' : 'cloud_antifilter';
+        updateSettings({ proxyMode: nextMode });
+        setScreenshotToast({
+          visible: true,
+          message: nextMode === 'direct' ? '⚡ اتصال مستقیم فعال شد' : '🛡️ پروکسی ضد فیلتر ابری فعال شد',
+        });
+        setTimeout(() => setScreenshotToast({ visible: false, message: '' }), 3000);
+      } else if (e.key.toLowerCase() === 's' && onOpenSettings) {
+        e.preventDefault();
+        onOpenSettings();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, isMuted, volume, isMinimized]);
+  }, [isPlaying, isMuted, volume, isMinimized, isProxyActive, onOpenSettings]);
 
   const togglePlay = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -753,14 +796,46 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <p className="text-sm text-[#cccccc] max-w-md mb-4 leading-relaxed">
             {errorMessage}
           </p>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            {/* Quick Anti-Filter Proxy Bypass button */}
+            {!isProxyActive ? (
+              <button
+                type="button"
+                onClick={() => {
+                  updateSettings({ proxyMode: 'cloud_antifilter' });
+                  setScreenshotToast({
+                    visible: true,
+                    message: '🛡️ پروکسی ضد فیلتر فعال شد · در حال بارگذاری مجدد استریم...',
+                  });
+                  setTimeout(() => setScreenshotToast({ visible: false, message: '' }), 4000);
+                  loadStream(currentSource.url);
+                }}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer shadow-lg"
+              >
+                <Shield size={16} />
+                <span>پخش با پروکسی ضد فیلتر ابری</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  updateSettings({ proxyMode: 'direct' });
+                  loadStream(currentSource.url);
+                }}
+                className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer shadow-lg"
+              >
+                <Wifi size={16} />
+                <span>تست با اتصال مستقیم</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={retryNextSource}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer shadow-lg"
             >
               <RefreshCw size={16} />
-              <span>تلاش با سرور پشتیبان بعدی ({currentSourceIndex + 1}/{sources.length})</span>
+              <span>سرور بعدی ({currentSourceIndex + 1}/{sources.length})</span>
             </button>
             <button
               type="button"
@@ -769,6 +844,63 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             >
               تلاش مجدد
             </button>
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-sky-400 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-neutral-700"
+              >
+                <Settings size={15} />
+                <span>تنظیمات پروکسی</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Technical Stats Overlay (when enabled in settings) */}
+      {settings.showStatsOverlay && (
+        <div className="absolute top-14 left-4 z-25 bg-black/85 backdrop-blur-md border border-white/10 rounded-xl p-3 text-[11px] font-mono text-neutral-300 space-y-1.5 select-none pointer-events-none shadow-2xl max-w-xs">
+          <div className="text-white font-bold pb-1 border-b border-white/10 flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5">
+              <Activity size={13} className="text-sky-400 animate-pulse" />
+              <span>آمار فنی استریم</span>
+            </span>
+            <span className="text-emerald-400 text-[10px] bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/30">HLS Live</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-neutral-400">کانال:</span>
+            <span className="text-white font-sans truncate max-w-[130px]">{channel.name}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-neutral-400">پروکسی:</span>
+            <span className={isProxyActive ? 'text-sky-400 font-bold' : 'text-emerald-400 font-bold'}>
+              {activeProxyLabel}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-neutral-400">کیفیت / رزولوشن:</span>
+            <span className="text-white">
+              {videoRef.current && videoRef.current.videoWidth > 0 
+                ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` 
+                : '1080p (Full HD)'}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-neutral-400">تاخیر پخش زنده:</span>
+            <span className="text-amber-400 font-bold">
+              {liveLatency !== null ? `${liveLatency.toFixed(1)} ثانیه` : 'کمتر از ۱ ثانیه'}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-neutral-400">فاصله از زنده:</span>
+            <span className={driftSeconds > 3 ? 'text-red-400 font-bold' : 'text-emerald-400'}>
+              {driftSeconds}s (بافر هدف: {settings.bufferLengthSeconds}s)
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-neutral-400">سرعت پخش:</span>
+            <span className="text-neutral-200">1.0x (Adaptive)</span>
           </div>
         </div>
       )}
@@ -924,6 +1056,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 {isLowLatency ? (liveLatency ? `${liveLatency.toFixed(1)}s` : 'LL') : 'STD'}
               </span>
             </div>
+
+            {/* Proxy Mode Indicator Pill */}
+            <div
+              onClick={() => {
+                const nextMode = isProxyActive ? 'direct' : 'cloud_antifilter';
+                updateSettings({ proxyMode: nextMode });
+                setScreenshotToast({
+                  visible: true,
+                  message: nextMode === 'direct' ? '⚡ حالت مستقیم فعال شد' : '🛡️ پروکسی ضد فیلتر فعال شد',
+                });
+                setTimeout(() => setScreenshotToast({ visible: false, message: '' }), 3000);
+              }}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-bold cursor-pointer transition-all border ${
+                isProxyActive 
+                  ? 'bg-sky-500/20 border-sky-500/40 text-sky-300 hover:bg-sky-500/30 shadow-xs' 
+                  : 'bg-neutral-800/80 border-neutral-700 text-neutral-400 hover:text-neutral-200'
+              }`}
+              title={`وضعیت اتصال: ${activeProxyLabel} (کلیک برای سوئیچ سریع · کلید P)`}
+            >
+              <Shield 
+                size={13} 
+                className={isProxyActive ? 'text-sky-400 fill-sky-400/20 animate-pulse' : 'text-neutral-500'} 
+              />
+              <span className="hidden sm:inline">
+                {isProxyActive ? 'پروکسی' : 'مستقیم'}
+              </span>
+              <span className="font-mono text-[10px] px-1 py-0.2 rounded bg-black/40 text-white/90">
+                {settings.proxyMode === 'telegram' ? 'TG' : settings.proxyMode === 'cloud_antifilter' ? 'Cloud' : settings.proxyMode === 'custom' ? 'Cust' : 'DIR'}
+              </span>
+            </div>
           </div>
 
           {/* Left controls in RTL: Multi-source, Miniplayer, Theater, Fullscreen */}
@@ -985,6 +1147,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             >
               <Camera size={19} />
             </button>
+
+            {/* Settings & Proxy Modal Button */}
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="p-1 text-[#e1e1e1] hover:text-sky-400 transition-colors cursor-pointer"
+                title="تنظیمات کامل، پروکسی تلگرام، بافر و کیفیت (S)"
+              >
+                <Settings size={19} />
+              </button>
+            )}
 
             {/* Miniplayer / Corner button */}
             {onToggleMinimize && (

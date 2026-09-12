@@ -8,9 +8,11 @@ import { VideoCard } from './components/VideoCard';
 import { WatchPage } from './components/WatchPage';
 import { ShareModal } from './components/ShareModal';
 import { SatelliteGuideModal } from './components/SatelliteGuideModal';
+import { SettingsModal } from './components/SettingsModal';
+import { useSettings } from './utils/useSettings';
 import { 
   Heart, History, Radio, Sparkles, Tv, Flame, 
-  Trash2, Compass, Film, Trophy, Music2 
+  Trash2, Compass, Film, Trophy, Music2, Shield, ShieldAlert 
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -82,9 +84,24 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(true);
-  const [darkMode, setDarkMode] = useState<boolean>(true);
   const [shareChannel, setShareChannel] = useState<Channel | null>(null);
   const [satelliteGuideOpen, setSatelliteGuideOpen] = useState<boolean>(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState<boolean>(false);
+
+  // Settings hook
+  const { settings, updateSettings, resetSettings } = useSettings();
+  const [darkMode, setDarkMode] = useState<boolean>(() => settings.theme === 'dark');
+
+  // Synchronize theme with settings
+  useEffect(() => {
+    setDarkMode(settings.theme === 'dark');
+  }, [settings.theme]);
+
+  const handleToggleDarkMode = () => {
+    const nextDark = !darkMode;
+    setDarkMode(nextDark);
+    updateSettings({ theme: nextDark ? 'dark' : 'light' });
+  };
 
   // Favorites state
   const [favorites, setFavorites] = useState<number[]>(() => {
@@ -188,9 +205,14 @@ export default function App() {
     }
   };
 
-  // Filter channels based on search, tab, and category
+  // Filter channels based on search, tab, category, and intranet mode
   const filteredChannels = useMemo(() => {
     let list = [...channels];
+
+    // Filter for National Intranet Only mode
+    if (settings.nationalIntranetOnly) {
+      list = list.filter((c) => c.iran || !c.vpn);
+    }
 
     // Search query filter
     if (searchQuery.trim()) {
@@ -235,7 +257,7 @@ export default function App() {
     }
 
     return list;
-  }, [channels, activeTab, selectedCategory, searchQuery, favorites, history]);
+  }, [channels, activeTab, selectedCategory, searchQuery, favorites, history, settings.nationalIntranetOnly]);
 
   // Featured channels for sidebar
   const featuredChannels = useMemo(() => {
@@ -265,8 +287,9 @@ export default function App() {
         onSelectChannel={handleSelectChannel}
         channels={channels}
         darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onToggleDarkMode={handleToggleDarkMode}
         onOpenSatelliteGuide={() => setSatelliteGuideOpen(true)}
+        onOpenSettings={() => setSettingsModalOpen(true)}
         favoritesCount={favorites.length}
         onGoToFavorites={() => {
           setActiveTab('favorites');
@@ -306,6 +329,7 @@ export default function App() {
           featuredChannels={featuredChannels}
           onSelectChannel={handleSelectChannel}
           activeChannelId={playingChannel?.id}
+          onOpenSettings={() => setSettingsModalOpen(true)}
         />
 
         {/* 3. Content Area */}
@@ -333,12 +357,39 @@ export default function App() {
               onToggleMinimize={() => {
                 setViewMode(viewMode === 'watch' ? 'browse' : 'watch');
               }}
+              onOpenSettings={() => setSettingsModalOpen(true)}
             />
           )}
 
           {/* YouTube Browse & Cards View (Visible when in Browse mode) */}
           {viewMode === 'browse' && (
             <div className="p-3 md:p-6 text-right">
+              {/* National Intranet Only Active Notice */}
+              {settings.nationalIntranetOnly && (
+                <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert size={18} className="text-amber-400 shrink-0" />
+                    <span>حالت اینترنت ملی فعال است: تنها کانال‌های با سرورهای پرسرعت داخلی ایران و بدون فیلترشکن نمایش داده می‌شوند.</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSettingsModalOpen(true)}
+                      className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold transition-colors cursor-pointer"
+                    >
+                      تنظیمات پروکسی
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ nationalIntranetOnly: false })}
+                      className="px-2 py-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      نمایش همه
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* YouTube Filter Chips (only on Home or Explore) */}
               {(activeTab === 'home' || activeTab === 'explore') && !searchQuery && (
                 <CategoryChips
@@ -467,6 +518,18 @@ export default function App() {
           onSelectChannel={handleSelectChannel}
         />
       )}
+
+      {/* 6. Settings & Telegram Proxy Modal */}
+      <SettingsModal
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        settings={settings}
+        onUpdateSettings={updateSettings}
+        onResetSettings={resetSettings}
+        favoritesCount={favorites.length}
+        historyCount={history.length}
+        onClearHistory={() => setHistory([])}
+      />
     </div>
   );
 }

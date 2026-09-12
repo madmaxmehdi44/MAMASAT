@@ -3,11 +3,14 @@ import {
   CheckCircle2, ThumbsUp, ThumbsDown, Share2, Heart, 
   Satellite, Bell, ChevronDown, ChevronUp, MessageSquare, 
   Send, Smile, MoreHorizontal, Radio, Tv, Eye, Sparkles,
-  ExternalLink, Copy, Check, Flame
+  ExternalLink, Copy, Check, Flame, Settings, Shield, Calendar, Clock
 } from 'lucide-react';
 import type { Channel } from '../types';
 import { VideoPlayer } from './VideoPlayer';
 import { useChannelThumbnails } from '../utils/useThumbnails';
+import { EPGGuide } from './EPGGuide';
+import { EPGQuickBar } from './EPGQuickBar';
+import { useChannelEPG } from '../utils/useChannelEPG';
 
 interface WatchPageProps {
   channel: Channel;
@@ -22,6 +25,7 @@ interface WatchPageProps {
   onMaximize?: () => void;
   onCloseMiniPlayer?: () => void;
   onToggleMinimize?: () => void;
+  onOpenSettings?: () => void;
 }
 
 interface ChatMessage {
@@ -46,6 +50,7 @@ export const WatchPage: React.FC<WatchPageProps> = ({
   onMaximize,
   onCloseMiniPlayer,
   onToggleMinimize,
+  onOpenSettings,
 }) => {
   const [theaterMode, setTheaterMode] = useState(false);
   const thumbnails = useChannelThumbnails();
@@ -58,6 +63,10 @@ export const WatchPage: React.FC<WatchPageProps> = ({
   const [chatVisible, setChatVisible] = useState(true);
   const [chatInput, setChatInput] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [rightTab, setRightTab] = useState<'epg' | 'chat'>('epg');
+
+  // Electronic Program Guide (EPG) hook for current channel
+  const epg = useChannelEPG(channel);
 
   // Initial simulated live chat messages
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -157,6 +166,7 @@ export const WatchPage: React.FC<WatchPageProps> = ({
         onMaximize={onMaximize}
         onCloseMiniPlayer={onCloseMiniPlayer}
         onToggleMinimize={onToggleMinimize}
+        onOpenSettings={onOpenSettings}
       />
 
       {/* 2. Watch Page Body (Hidden when player is minimized in the corner) */}
@@ -274,6 +284,24 @@ export const WatchPage: React.FC<WatchPageProps> = ({
                   <span>اشتراک‌گذاری</span>
                 </button>
 
+                {/* Electronic Program Guide (EPG) Button */}
+                <button
+                  type="button"
+                  onClick={() => setRightTab(rightTab === 'epg' ? 'chat' : 'epg')}
+                  className={`px-3.5 py-2 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    rightTab === 'epg'
+                      ? 'bg-red-600/20 border-red-500/50 text-red-300 font-bold'
+                      : 'bg-[#272727] hover:bg-[#333333] border-[#3f3f3f] text-[#f1f1f1]'
+                  }`}
+                  title="جدول پخش برنامه‌ها (EPG)"
+                >
+                  <Calendar size={16} className="text-red-500" />
+                  <span>جدول پخش (EPG)</span>
+                  {epg.schedule?.currentProgram && (
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  )}
+                </button>
+
                 {/* Satellite Guide Button */}
                 <button
                   type="button"
@@ -284,8 +312,28 @@ export const WatchPage: React.FC<WatchPageProps> = ({
                   <Satellite size={16} className="text-[#ff4e4e]" />
                   <span className="hidden sm:inline">فرکانس ماهواره</span>
                 </button>
+
+                {/* Settings & Proxy Button */}
+                {onOpenSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="px-3.5 py-2 rounded-full bg-[#272727] hover:bg-[#333333] border border-[#3f3f3f] text-xs font-medium flex items-center gap-1.5 text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                    title="تنظیمات پخش، بافر و پروکسی تلگرام"
+                  >
+                    <Settings size={16} />
+                    <span>تنظیمات و پروکسی</span>
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Electronic Program Guide (EPG) Quick Bar */}
+            <EPGQuickBar
+              schedule={epg.schedule}
+              onOpenFullGuide={() => setRightTab('epg')}
+              isLoading={epg.isLoading}
+            />
 
             {/* Collapsible YouTube Description Box */}
             <div 
@@ -336,76 +384,136 @@ export const WatchPage: React.FC<WatchPageProps> = ({
             </div>
           </div>
 
-          {/* Right Column: Live Chat & Up Next Recommendations */}
+          {/* Right Column: Live Chat & Electronic Program Guide & Up Next Recommendations */}
           <div className={theaterMode ? 'col-span-12 mt-6' : 'col-span-12 lg:col-span-4'}>
             
-            {/* Live Chat Panel (YouTube Authenticity) */}
-            <div className="rounded-2xl border border-[#272727] bg-[#181818] overflow-hidden mb-6 shadow-lg">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#272727] bg-[#1f1f1f]">
-                <div className="flex items-center gap-2">
-                  <MessageSquare size={16} className="text-red-500" />
-                  <span className="text-sm font-bold text-white">چت زنده بینندگان</span>
-                  <span className="text-[10px] bg-red-600 text-white font-bold px-1.5 py-0.2 rounded">
-                    زنده
+            {/* Dual Tab Switcher: EPG vs Live Chat */}
+            <div className="flex items-center gap-1.5 p-1 mb-3.5 rounded-2xl bg-[#1c1c1c] border border-[#2c2c2c] shadow-md">
+              <button
+                type="button"
+                onClick={() => setRightTab('epg')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  rightTab === 'epg'
+                    ? 'bg-red-600 text-white shadow-md'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                <Calendar size={15} />
+                <span>جدول پخش (EPG)</span>
+                {epg.schedule?.programs.length ? (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                    {epg.schedule.programs.length}
                   </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setChatVisible(!chatVisible)}
-                  className="text-xs text-[#aaaaaa] hover:text-white transition-colors"
-                >
-                  {chatVisible ? 'مخفی کردن' : 'نمایش چت'}
-                </button>
-              </div>
+                ) : null}
+              </button>
 
-              {chatVisible && (
-                <>
-                  {/* Messages Feed */}
-                  <div className="p-3 h-72 overflow-y-auto space-y-2.5 text-xs">
-                    {chatMessages.map((msg) => (
-                      <div 
-                        key={msg.id} 
-                        className={`flex items-start gap-2.5 p-1.5 rounded-lg transition-colors ${
-                          msg.isSuper ? 'bg-red-950/40 border border-red-500/30' : 'hover:bg-[#222222]'
-                        }`}
-                      >
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-600 flex items-center justify-center font-bold text-[9px] text-white shrink-0">
-                          {msg.avatar}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2">
-                            <span className="font-bold text-[#e1e1e1]">{msg.user}</span>
-                            <span className="text-[10px] text-[#717171]">{msg.time}</span>
-                          </div>
-                          <p className="text-[#cccccc] mt-0.5 break-words leading-relaxed">
-                            {msg.text}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Message Input Box */}
-                  <form onSubmit={handleSendMessage} className="p-2 border-t border-[#272727] bg-[#1a1a1a] flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="ارسال پیام به چت زنده..."
-                      className="flex-1 bg-[#121212] border border-[#333333] rounded-full px-3 py-1.5 text-xs text-white placeholder-[#717171] focus:outline-none focus:border-red-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!chatInput.trim()}
-                      className="p-1.5 rounded-full bg-red-600 text-white disabled:opacity-40 hover:bg-red-700 transition-colors"
-                      title="ارسال"
-                    >
-                      <Send size={15} />
-                    </button>
-                  </form>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => setRightTab('chat')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  rightTab === 'chat'
+                    ? 'bg-neutral-800 text-white shadow-xs border border-neutral-700'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                }`}
+              >
+                <MessageSquare size={15} />
+                <span>چت زنده</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-600 text-white font-bold">
+                  زنده
+                </span>
+              </button>
             </div>
+
+            {/* Panel 1: Full EPG Guide */}
+            {rightTab === 'epg' && (
+              <div className="mb-6">
+                <EPGGuide
+                  channel={channel}
+                  schedule={epg.schedule}
+                  isLoading={epg.isLoading}
+                  dateOffset={epg.dateOffset}
+                  onSelectDateOffset={epg.setDateOffset}
+                  selectedCategory={epg.selectedCategory}
+                  onSelectCategory={epg.setSelectedCategory}
+                  searchQuery={epg.searchQuery}
+                  onSearchChange={epg.setSearchQuery}
+                  filteredPrograms={epg.filteredPrograms}
+                  reminders={epg.reminders}
+                  onToggleReminder={epg.toggleReminder}
+                  onRefresh={epg.refresh}
+                />
+              </div>
+            )}
+
+            {/* Panel 2: Live Chat Panel (YouTube Authenticity) */}
+            {rightTab === 'chat' && (
+              <div className="rounded-2xl border border-[#272727] bg-[#181818] overflow-hidden mb-6 shadow-lg">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#272727] bg-[#1f1f1f]">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare size={16} className="text-red-500" />
+                    <span className="text-sm font-bold text-white">چت زنده بینندگان</span>
+                    <span className="text-[10px] bg-red-600 text-white font-bold px-1.5 py-0.2 rounded">
+                      زنده
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setChatVisible(!chatVisible)}
+                    className="text-xs text-[#aaaaaa] hover:text-white transition-colors"
+                  >
+                    {chatVisible ? 'مخفی کردن' : 'نمایش چت'}
+                  </button>
+                </div>
+
+                {chatVisible && (
+                  <>
+                    {/* Messages Feed */}
+                    <div className="p-3 h-72 overflow-y-auto space-y-2.5 text-xs">
+                      {chatMessages.map((msg) => (
+                        <div 
+                          key={msg.id} 
+                          className={`flex items-start gap-2.5 p-1.5 rounded-lg transition-colors ${
+                            msg.isSuper ? 'bg-red-950/40 border border-red-500/30' : 'hover:bg-[#222222]'
+                          }`}
+                        >
+                          <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-neutral-700 to-neutral-600 flex items-center justify-center font-bold text-[9px] text-white shrink-0">
+                            {msg.avatar}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-bold text-[#e1e1e1]">{msg.user}</span>
+                              <span className="text-[10px] text-[#717171]">{msg.time}</span>
+                            </div>
+                            <p className="text-[#cccccc] mt-0.5 break-words leading-relaxed">
+                              {msg.text}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Message Input Box */}
+                    <form onSubmit={handleSendMessage} className="p-2 border-t border-[#272727] bg-[#1a1a1a] flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="ارسال پیام به چت زنده..."
+                        className="flex-1 bg-[#121212] border border-[#333333] rounded-full px-3 py-1.5 text-xs text-white placeholder-[#717171] focus:outline-none focus:border-red-500"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!chatInput.trim()}
+                        className="p-1.5 rounded-full bg-red-600 text-white disabled:opacity-40 hover:bg-red-700 transition-colors"
+                        title="ارسال"
+                      >
+                        <Send size={15} />
+                      </button>
+                    </form>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* "Up Next" / Recommended Channels Rail */}
             <div>

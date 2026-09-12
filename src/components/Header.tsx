@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, Search, Bell, Moon, Sun, Tv, X, Mic, Check, 
-  Satellite, Heart, Flame, ShieldAlert, Sparkles, SlidersHorizontal 
+  Satellite, Heart, Flame, ShieldAlert, Sparkles, SlidersHorizontal,
+  Settings, Shield, Send, Radio, Wifi
 } from 'lucide-react';
 import type { Channel } from '../types';
+import { useSettings } from '../utils/useSettings';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -14,6 +16,7 @@ interface HeaderProps {
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onOpenSatelliteGuide: () => void;
+  onOpenSettings: () => void;
   favoritesCount: number;
   onGoToFavorites: () => void;
   onGoHome: () => void;
@@ -28,10 +31,12 @@ export const Header: React.FC<HeaderProps> = ({
   darkMode,
   onToggleDarkMode,
   onOpenSatelliteGuide,
+  onOpenSettings,
   favoritesCount,
   onGoToFavorites,
   onGoHome,
 }) => {
+  const { settings, isProxyActive, activeProxyLabel } = useSettings();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -222,12 +227,42 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Left side in RTL: Actions */}
       <div className="flex items-center gap-1 sm:gap-2">
+        {/* Quick Connection / Proxy Status Pill */}
+        <button
+          id="btn-header-proxy-status"
+          type="button"
+          onClick={onOpenSettings}
+          className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+            settings.nationalIntranetOnly
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+              : isProxyActive
+              ? 'bg-sky-500/20 text-sky-300 border-sky-500/40 hover:bg-sky-500/30 shadow-xs'
+              : 'bg-[#222222] text-[#cccccc] border-[#333333] hover:bg-[#2c2c2c] hover:text-white'
+          }`}
+          title={`وضعیت شبکه: ${activeProxyLabel} - کلیک برای تغییر تنظیمات و پروکسی`}
+        >
+          {settings.nationalIntranetOnly ? (
+            <Radio size={13} className="text-amber-400 animate-pulse" />
+          ) : isProxyActive ? (
+            <Shield size={13} className="text-sky-400 fill-sky-400/20 animate-pulse" />
+          ) : (
+            <Wifi size={13} className="text-emerald-400" />
+          )}
+          <span className="hidden sm:inline">
+            {settings.nationalIntranetOnly
+              ? 'اینترنت ملی'
+              : isProxyActive
+              ? 'پروکسی فعال'
+              : 'مستقیم'}
+          </span>
+        </button>
+
         {/* Satellite Guide Button */}
         <button
           id="btn-open-satellite-guide"
           type="button"
           onClick={onOpenSatelliteGuide}
-          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#222222] hover:bg-[#2c2c2c] text-xs font-semibold text-[#f1f1f1] border border-[#303030] transition-colors"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#222222] hover:bg-[#2c2c2c] text-xs font-semibold text-[#f1f1f1] border border-[#303030] transition-colors cursor-pointer"
           title="مشاهده فرکانس‌های ماهواره‌ای"
         >
           <Satellite size={14} className="text-[#ff4e4e]" />
@@ -239,7 +274,7 @@ export const Header: React.FC<HeaderProps> = ({
           id="btn-header-favorites"
           type="button"
           onClick={onGoToFavorites}
-          className="relative p-2 rounded-full hover:bg-[#272727] text-[#f1f1f1] transition-colors"
+          className="relative p-2 rounded-full hover:bg-[#272727] text-[#f1f1f1] transition-colors cursor-pointer"
           title="علاقه‌مندی‌های من"
         >
           <Heart size={20} className={favoritesCount > 0 ? 'text-red-500 fill-red-500' : ''} />
@@ -256,7 +291,7 @@ export const Header: React.FC<HeaderProps> = ({
             id="btn-notifications"
             type="button"
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-full hover:bg-[#272727] text-[#f1f1f1] transition-colors"
+            className="relative p-2 rounded-full hover:bg-[#272727] text-[#f1f1f1] transition-colors cursor-pointer"
             title="اعلان‌های زنده"
           >
             <Bell size={20} />
@@ -287,12 +322,26 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
+        {/* Settings Button */}
+        <button
+          id="btn-header-settings"
+          type="button"
+          onClick={onOpenSettings}
+          className="relative p-2 rounded-full hover:bg-[#272727] text-[#f1f1f1] transition-colors cursor-pointer"
+          title="تنظیمات کامل سایت و پروکسی تلگرام"
+        >
+          <Settings size={20} />
+          {isProxyActive && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-sky-400 rounded-full animate-pulse" />
+          )}
+        </button>
+
         {/* Dark/Light Theme Toggle */}
         <button
           id="btn-theme-toggle"
           type="button"
           onClick={onToggleDarkMode}
-          className="p-2 rounded-full hover:bg-[#272727] text-[#f1f1f1] transition-colors"
+          className="p-2 rounded-full hover:bg-[#272727] text-[#f1f1f1] transition-colors cursor-pointer"
           title={darkMode ? 'تغییر به تم روشن' : 'تغییر به تم دارک یوتیوب'}
         >
           {darkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -322,11 +371,30 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
               <div className="pt-2 space-y-1 text-xs text-[#dddddd]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    onOpenSettings();
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg bg-red-600/15 hover:bg-red-600 text-white font-bold transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <Settings size={14} />
+                    <span>تنظیمات کامل و پروکسی</span>
+                  </span>
+                  <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded">
+                    {isProxyActive ? 'پروکسی فعال' : 'تنظیمات'}
+                  </span>
+                </button>
+
                 <div className="flex items-center justify-between px-2 py-2 rounded hover:bg-[#2c2c2c] cursor-pointer">
-                  <span>وضعیت سرورهای پخش:</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    فعال و آنلاین
+                  <span>وضعیت اتصال:</span>
+                  <span className={`font-bold flex items-center gap-1 ${
+                    isProxyActive ? 'text-sky-400' : 'text-emerald-400'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${isProxyActive ? 'bg-sky-500 animate-pulse' : 'bg-emerald-500'}`} />
+                    {isProxyActive ? 'پروکسی فعال' : 'اتصال مستقیم'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-2 py-2 rounded hover:bg-[#2c2c2c] cursor-pointer">
