@@ -1,0 +1,6 @@
+{
+  "name": "MOMSAT YouTube TV",
+  "description": "پلتفرم پیشرفته پخش زنده کانال‌های تلویزیونی و ماهواره‌ای با طراحی و ظرافت یوتیوب",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
