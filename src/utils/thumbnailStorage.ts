@@ -128,11 +128,13 @@ export async function saveChannelScreenshot(
 
   // 3. Dispatch browser event for reactive UI updates
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent('momsat_thumbnail_updated', {
-        detail: record,
-      })
-    );
+    queueMicrotask(() => {
+      window.dispatchEvent(
+        new CustomEvent('momsat_thumbnail_updated', {
+          detail: record,
+        })
+      );
+    });
   }
 
   return record;

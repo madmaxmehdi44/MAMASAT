@@ -90,17 +90,10 @@ export default function App() {
 
   // Settings hook
   const { settings, updateSettings, resetSettings } = useSettings();
-  const [darkMode, setDarkMode] = useState<boolean>(() => settings.theme === 'dark');
-
-  // Synchronize theme with settings
-  useEffect(() => {
-    setDarkMode(settings.theme === 'dark');
-  }, [settings.theme]);
+  const darkMode = settings.theme === 'dark';
 
   const handleToggleDarkMode = () => {
-    const nextDark = !darkMode;
-    setDarkMode(nextDark);
-    updateSettings({ theme: nextDark ? 'dark' : 'light' });
+    updateSettings({ theme: darkMode ? 'light' : 'dark' });
   };
 
   // Favorites state

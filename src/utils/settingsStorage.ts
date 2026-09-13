@@ -72,7 +72,7 @@ export const SETTINGS_CHANGE_EVENT = 'momsat_settings_changed';
  */
 export function loadSettings(): AppSettings {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(SETTINGS_KEY) : null;
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw);
     return {
@@ -88,16 +88,74 @@ export function loadSettings(): AppSettings {
   }
 }
 
+// In-memory snapshot cache for referential stability with React 18 useSyncExternalStore
+let currentSettings: AppSettings = loadSettings();
+const settingsListeners = new Set<() => void>();
+
+export function getSettingsSnapshot(): AppSettings {
+  return currentSettings;
+}
+
+export function subscribeToSettings(listener: () => void): () => void {
+  settingsListeners.add(listener);
+  return () => {
+    settingsListeners.delete(listener);
+  };
+}
+
+function notifyListeners(): void {
+  settingsListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (err) {
+      console.error('Settings listener error:', err);
+    }
+  });
+}
+
+// Listen for storage events (e.g. from other tabs or windows)
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === SETTINGS_KEY && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        currentSettings = {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          telegramProxies: Array.isArray(parsed?.telegramProxies) && parsed.telegramProxies.length > 0
+            ? parsed.telegramProxies
+            : DEFAULT_TELEGRAM_PROXIES,
+        };
+        queueMicrotask(() => {
+          notifyListeners();
+        });
+      } catch (err) {
+        console.warn('Failed to parse storage sync event', err);
+      }
+    }
+  });
+}
+
 /**
- * Save settings to localStorage and dispatch update event
+ * Save settings to localStorage, update in-memory snapshot, and safely notify listeners
  */
 export function saveSettings(settings: AppSettings): void {
+  currentSettings = { ...settings };
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    window.dispatchEvent(new CustomEvent(SETTINGS_CHANGE_EVENT, { detail: settings }));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    }
   } catch (e) {
     console.error('Failed to save settings', e);
   }
+
+  // Defer notification via microtask so it NEVER runs synchronously inside React render or setState updater
+  queueMicrotask(() => {
+    notifyListeners();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(SETTINGS_CHANGE_EVENT, { detail: settings }));
+    }
+  });
 }
 
 /**
